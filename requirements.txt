@@ -1,0 +1,26 @@
+# General dependencies
+asyncio
+os
+re
+
+# LangChain and related dependencies
+langchain
+langchain_openai
+langchain_core
+langchain_community
+
+# VectorStore (FAISS) for document embeddings
+faiss-cpu  # Use faiss-gpu if needed for GPU support
+
+# Text splitting and document handling
+langchain_text_splitters
+
+# Web scraping (if not already included via LangChain)
+beautifulsoup4
+requests
+
+# OpenAI embeddings and LLMs
+openai
+
+# PDF and document handling
+pypdf2

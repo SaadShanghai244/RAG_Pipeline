@@ -7,7 +7,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
-from .config import OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, EMBEDDED_MODEL, DIR_PATH
+from .config import OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, EMBEDDED_MODEL, DIR_PATH, FILE_PATH, URL
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from .custom_loader import CustomDocumentLoader
 from .scrape_url import Scrapper
@@ -240,7 +240,7 @@ class TextEmbeddings:
             log_error(f"Error in embedding_document: {str(e)}")
             return None
     
-    async def main(self, user_input,query, path="app/data/pdfs/Animal.pdf", url="https://lilianweng.github.io/posts/2023-06-23-agent/"):
+    async def main(self, user_input,query, path=FILE_PATH, url=URL):
         try:
             """This function is the main function of TextEmbedding class and it will check the user requirements that does it want to scrape or want to embed the document"""
             self.query = query

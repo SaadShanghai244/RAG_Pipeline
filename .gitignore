@@ -162,5 +162,3 @@ cython_debug/
 #.idea/
 
 faiss_index
-
-embedding_utils.py
