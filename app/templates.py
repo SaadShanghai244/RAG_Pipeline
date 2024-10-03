@@ -34,11 +34,9 @@ Answer: "I am an AI assistant created to help answer your questions clearly and 
 """
 
 SYSTEM_TEMPLATE = """
-You are tasked with answering the user's questions based strictly on the provided context.
-If the context does not contain the information required to answer the question, respond with:
-"I am not allowed to answer this question because it is not relevant to our knowledge base."
+You are tasked with answering the user's questions based on the provided context. Carefully analyze the context to determine if it contains the necessary information to answer the question.
 
-<context>
+Important: Always start the response directly with the relevant answer.
+Context:
 {context}
-</context>
 """
