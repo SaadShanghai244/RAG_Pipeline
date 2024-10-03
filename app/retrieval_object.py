@@ -1,7 +1,5 @@
-import os
-import asyncio
 from langchain_openai import ChatOpenAI
-from templates import BASIC_TEMPLATE, SYSTEM_TEMPLATE
+from .templates import SYSTEM_TEMPLATE
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -9,10 +7,13 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
-from config import OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, EMBEDDED_MODEL, DIR_PATH
+from .config import OPENAI_API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS, EMBEDDED_MODEL, DIR_PATH
 from langchain_community.document_loaders import PyPDFDirectoryLoader
-from custom_loader import CustomDocumentLoader
-from utils import log_error, log_info
+from .custom_loader import CustomDocumentLoader
+from .scrape_url import Scrapper
+from .utils import log_error
+import os
+import asyncio
 import re
 
 
@@ -33,9 +34,8 @@ class TextEmbeddings:
         self.query = query
         self.index_name = "faiss_index"  # Default FAISS index name
         self.all_splits = None
-        self.file_path = os.path.join(DIR_PATH, file_path)
 
-    async def pdf_loader_single_file(self, filename: str):
+    async def pdf_loader_single_file(self):
         """
         Asynchronously loads a PDF document and returns its content as a list of `Document` objects.
 
@@ -46,7 +46,7 @@ class TextEmbeddings:
             list: A list of `Document` objects containing the text content of the PDF.
         """
         try:
-            loader = PyPDFLoader(filename)
+            loader = PyPDFLoader(self.file_path)
             documents = await asyncio.to_thread(loader.load)  # Offload blocking IO to thread
             return documents
         except Exception as e:
@@ -80,18 +80,30 @@ class TextEmbeddings:
         except Exception as e:
             print("Error in txt_file_loader: ", e)
 
-    async def vector_store(self):
+    async def storing_vector(self):
         """
         Asynchronously stores document splits (chunks) as embeddings in a FAISS vector store.
+
+        Returns:
+            bool: True if the vector store was successfully saved, False otherwise.
         """
         try:
-            if self.all_splits is None:
+            if not self.all_splits:
                 raise ValueError("Document splits are not available for vector storage.")
-            
-            vector_store = FAISS.from_documents(self.all_splits, self.embeddings)
-            await asyncio.to_thread(vector_store.save_local, self.index_name)  # Offload FAISS store save to thread
+
+            # Store the document splits into the FAISS vector store
+            vector_store = FAISS.from_documents(documents=self.all_splits, embedding=self.embeddings)
+            await asyncio.to_thread(vector_store.save_local, self.index_name)  # Offload to avoid blocking
+
+            # Confirm if the index was created successfully
+            if os.path.exists(f"{self.index_name}/index.faiss"):
+                return True
+            else:
+                log_error("Vector store index was not saved correctly.")
+                return False
         except Exception as e:
             log_error(f"Error in vector_store: {str(e)}")
+            return False
 
     async def retrieve_vector(self):
         """
@@ -102,7 +114,7 @@ class TextEmbeddings:
         """
         try:
             vector_store = await asyncio.to_thread(FAISS.load_local, self.index_name, self.embeddings, allow_dangerous_deserialization=True)
-            retriever = vector_store.as_retriever(k=2)
+            retriever = vector_store.as_retriever(k=4)
             return retriever
         except Exception as e:
             log_error(f"Error in retrieve_vector: {str(e)}")
@@ -166,8 +178,17 @@ class TextEmbeddings:
         except Exception as e:
             log_error(f"Error in select_method_to_apply: {str(e)}")
             return None
+
+    async def split_document(self, document):
+        try:
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=50, chunk_overlap=0)
+            self.all_splits = text_splitter.split_documents(documents=document)
+            return True
+        except Exception as e:
+            log_error(f"Error in split_document: {str(e)}")
+            return None
         
-    async def embedding_document(self, path=None):
+    async def embedding_document(self):
         """
         Asynchronously embeds a document and performs a retrieval-based question answering process.
 
@@ -175,21 +196,22 @@ class TextEmbeddings:
             path (str): The file path to the PDF document.
         """
         try:
-            if os.path.exists(DIR_PATH):
+            if os.path.exists(self.file_path):
                 document = await self.select_method_to_apply()
                 if document:
                     # Step 2: Split the document into chunks
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
-                    self.all_splits = text_splitter.split_documents(documents=document)
+                    res = await self.split_document(document)
+                    if res is None:
+                        return None
 
                     # Step 3: Create the FAISS vector store if it doesn't exist
                     if not os.path.exists(self.index_name):
-                        await self.vector_store()
+                        await self.storing_vector()
 
                     # Step 4: Retrieve documents using vector store
                     retriever = await self.retrieve_vector()
-                    docs = await asyncio.to_thread(retriever.invoke, self.query)
-                    print("Retrieved documents: ", docs)
+                    # docs = await asyncio.to_thread(retriever.invoke, self.query)
+                    docs = retriever.invoke(self.query)
 
                     # Step 5: Create the chain and answer the question
                     question_answering_prompt = ChatPromptTemplate.from_messages(
@@ -213,19 +235,26 @@ class TextEmbeddings:
                     print("\nResult: ", result)
                     return result
             else:
-                print(f"\nThe file {path} does not exist.")
+                print(f"\nThe file {self.file_path} does not exist.")
         except Exception as e:
             log_error(f"Error in embedding_document: {str(e)}")
             return None
+    
+    async def main(self, user_input,query, path="app/data/pdfs/Animal.pdf", url="https://lilianweng.github.io/posts/2023-06-23-agent/"):
+        try:
+            """This function is the main function of TextEmbedding class and it will check the user requirements that does it want to scrape or want to embed the document"""
+            self.query = query
+            if user_input == "doc":
+                if path:
+                    self.file_path = path
+                    await self.embedding_document()
+            elif user_input == "scrape":
+                scrapper = Scrapper(url=url, text_embeddings=self)
+                await scrapper.scrape()
+            else:
+                print("\nInvalid user input. Please choose either 'doc' or'scrape'.")
+        except Exception as e:
+            log_error(f"Error in Main Function of TextEmbedding class: {str(e)}")
+            return None
 
 
-# Entry point for the asynchronous program
-async def main():
-    query = input("Type in your query: \n")
-    while query != "exit":
-        obj = TextEmbeddings(query,"animal.txt")
-        await obj.embedding_document()  # Ensure the path to the PDF file is correct
-        query = input("Type in your query: \n")
-
-if __name__ == "__main__":
-    asyncio.run(main())
