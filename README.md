@@ -85,7 +85,7 @@ This project is licensed under the MIT License.
 ### Key Additions:
 
 - **Installation Instructions**: Step-by-step instructions on how to clone the repository, install dependencies, and set up environment variables.
-- **Running the Project**: Detailed instructions on how to run the project using the `python retrieval_object.py` command.
+- **Running the Project**: Detailed instructions on how to run the project using the `python main.py` command.
 - **Program Flow and Features**: Describes how the system works, the key methods, and error handling.
 - **Customization**: Instructions on how to extend the project to support other file types.
 
